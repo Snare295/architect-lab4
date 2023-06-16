@@ -11,7 +11,7 @@ RUN apk add --no-cache dos2unix
 WORKDIR /opt/practice-4
 COPY entry.sh /opt/practice-4/
 RUN dos2unix /opt/practice-4/entry.sh
-COPY --from=build /go/bin/* /opt/practice-4
+COPY --from=build /go/bin/* /opt/practice-4/
 RUN ls /opt/practice-4
 ENTRYPOINT ["/opt/practice-4/entry.sh"]
 CMD ["server"]

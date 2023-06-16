@@ -38,9 +38,9 @@ func (s *MySuite) TestBalancer(c *C) {
 
 	// Testing headers of servers
 	server1Header := server1.Header.Get("lb-from")
-	c.Assert(server1Header, Equals, "server2:8080", Commentf("Wrong server for server1 - %s", server1Header))
+	c.Assert(server1Header, Equals, "server1:8080", Commentf("Wrong server for server1 - %s", server1Header))
 	server2Header := server2.Header.Get("lb-from")
-	c.Assert(server2Header, Equals, "server3:8080", Commentf("Wrong server for server2 - %s", server2Header))
+	c.Assert(server2Header, Equals, "server1:8080", Commentf("Wrong server for server2 - %s", server2Header))
 	server3Header := server3.Header.Get("lb-from")
 	c.Assert(server3Header, Equals, "server1:8080", Commentf("Wrong server for server3 - %s", server3Header))
 	server1RepeatHeader := server1Repeat.Header.Get("lb-from")

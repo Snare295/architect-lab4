@@ -13,7 +13,6 @@ import (
 
 	"github.com/Snare295/architect-lab4/httptools"
 	"github.com/Snare295/architect-lab4/signal"
-	"golang.org/x/exp/slices"
 )
 
 var (
@@ -118,26 +117,16 @@ func (b *BalancerRouter) createServersInsts(sList []string) {
 
 func (b *BalancerRouter) findServerByUrl(s string) int {
 	hash := hashing(s)
-	serverIndex := int(hash) % len(b.servers)
-	fmt.Println("findSereve by url", serverIndex)
-	serv := &b.servers[serverIndex]
+	hashed := int(hash)
 
-	for _, element := range serv.conHash {
-		if element == hash {
-			return serverIndex
-		}
-	}
-
-	//loop if first loop can't find in server of hesh module
 	for i := 0; i < len(b.servers); i++ {
-		if i == serverIndex {
-			continue
-		}
+		serverIndex := (hashed + i) % len(b.servers)
+		server := &b.servers[serverIndex]
 
-		server := b.servers[i]
 		for _, element := range server.conHash {
 			if element == hash {
-				return i
+				fmt.Println("Client module of hash", serverIndex)
+				return serverIndex
 			}
 		}
 	}
@@ -145,20 +134,37 @@ func (b *BalancerRouter) findServerByUrl(s string) int {
 	return -1
 }
 
-func (b *BalancerRouter) putClientToServ(s string) error {
+func (b *BalancerRouter) putClientToServ(s string) (error, int) {
 	hash := hashing(s)
-	serverIndex := int(hash) % len(b.servers)
+	hashed := int(hash)
 
-	server := &b.servers[serverIndex]
-	for _, element := range b.liveServers {
-		if element.serverName == server.serverName {
-			server.conHash = append(server.conHash, hash)
-			b.curServer = serverIndex
-			return nil
+	numOfServ := len(b.servers)
+	for i := 0; i < numOfServ; i++ {
+		serverIndex := (hashed + i) % len(b.servers)
+		log.Println("New server index", serverIndex)
+		server := &b.servers[serverIndex]
+		for _, element := range b.liveServers {
+			if element.serverName == server.serverName {
+				server.conHash = append(server.conHash, hash)
+				b.curServer = serverIndex
+				log.Println("place client to server")
+				return nil, serverIndex
+			}
 		}
 	}
 
-	return nil
+	return fmt.Errorf("putClientToServ have exited without putting client to serv"), -1
+}
+
+func (b *BalancerRouter) removeClientsFromDead(s string) {
+	for i := 0; i < len(b.servers); i++ {
+		if b.servers[i].serverName == s {
+			var emptySlice []uint16
+			b.servers[i].conHash = emptySlice
+			log.Println("Server:", s, "is dead, removing all clients")
+			log.Println("Value of dead:", b.servers[1].conHash)
+		}
+	}
 }
 
 func (b *BalancerRouter) addNewLiveServer(name string, working bool) {
@@ -175,7 +181,7 @@ func (b *BalancerRouter) addNewLiveServer(name string, working bool) {
 					}
 				}
 				b.liveServers = append(b.liveServers, pw)
-				println("Add instane of server from live servers of", pw.serverName)
+				println("Add instance of server from live servers of", pw.serverName)
 				return
 			}
 
@@ -183,8 +189,10 @@ func (b *BalancerRouter) addNewLiveServer(name string, working bool) {
 				for i := 0; i < len(b.liveServers); i++ {
 					serv := b.liveServers[i]
 					if pw.serverName == serv.serverName {
-						b.liveServers = slices.Delete(b.liveServers, i, i)
-						println("Delted instane of server from live servers of", pw.serverName)
+						i1 := i + 1
+						newSlice := append(b.liveServers[:i], b.liveServers[i1:]...)
+						b.liveServers = newSlice
+						println("Deleted instane of server from live servers of", pw.serverName)
 						return
 					}
 				}
@@ -208,14 +216,28 @@ func main() {
 				name, health := server, health(server)
 				log.Println(name, health)
 				b.addNewLiveServer(server, health)
+				if !health {
+					b.removeClientsFromDead(name)
+				}
 			}
 		}()
 	}
 
 	frontend := httptools.CreateServer(*port, http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 		// TODO: Рееалізуйте свій алгоритм балансувальника.
-		b.findServerByUrl(r.URL.Path)
-		forward(serversPool[0], rw, r)
+		url := r.URL.Path
+		clientServer := b.findServerByUrl(url)
+		log.Println("server of client was found:", clientServer)
+		var err error
+		if clientServer == -1 {
+			err, clientServer = b.putClientToServ(url)
+			if err != nil {
+				println(err)
+			}
+		}
+
+		log.Println("Request from client on server index", clientServer)
+		forward(serversPool[clientServer], rw, r)
 	}))
 
 	log.Println("Starting load balancer...")
